@@ -56,18 +56,19 @@ MAX_ITEMS = 12
 
 DEFAULT_DATA = {
     "items": [
-        "laptop", "water_bottle", "tent", "sleeping_bag", "flashlight",
-        "first_aid_kit", "stove", "jacket", "map", "camera",
+        "laptop", "water bottle", "tent", "sleeping bag", "flashlight",
+        "first aid kit", "stove", "jacket", "map", "camera",
+        "knife", "compass",
     ],
     "value": {
-        "laptop": 25, "water_bottle": 4, "tent": 18, "sleeping_bag": 14,
-        "flashlight": 6, "first_aid_kit": 10, "stove": 12, "jacket": 11,
-        "map": 5, "camera": 16,
+        "laptop": 25, "water bottle": 4, "tent": 18, "sleeping bag": 14,
+        "flashlight": 6, "first aid kit": 10, "stove": 12, "jacket": 11,
+        "map": 5, "camera": 16, "knife": 8, "compass": 7,
     },
     "weight": {
-        "laptop": 6, "water_bottle": 2, "tent": 9, "sleeping_bag": 5,
-        "flashlight": 1, "first_aid_kit": 3, "stove": 4, "jacket": 4,
-        "map": 1, "camera": 3,
+        "laptop": 6, "water bottle": 2, "tent": 9, "sleeping bag": 5,
+        "flashlight": 1, "first aid kit": 3, "stove": 4, "jacket": 4,
+        "map": 1, "camera": 3, "knife": 1, "compass": 1,
     },
     "weight_limit": 14,
 }
@@ -295,13 +296,13 @@ def df_to_data(df, weight_limit):
     }
 
 
-def colored_metric(label, value, color):
+def colored_metric(label, value, color, align="left"):
     # st.metric doesn't support arbitrary value coloring, so we render our
     # own metric-shaped block via raw HTML. Used to flag matching/mismatching
     # values (green if your value equals the optimum, red otherwise).
     style_color = f"color: {color};" if color else ""
     st.markdown(
-        f"<div style='margin: 0.25rem 0 1rem 0;'>"
+        f"<div style='margin: 0.25rem 0 1rem 0; text-align: {align};'>"
         f"<div style='font-size: 0.875rem; color: rgba(49,51,63,0.6); margin-bottom: 0.25rem;'>{label}</div>"
         f"<div style='font-size: 2rem; font-weight: 600; line-height: 1; {style_color}'>{value}</div>"
         f"</div>",
@@ -380,6 +381,15 @@ def build_instance_latex(data):
 
 CSS = """
 <style>
+/* Tighten the top of the main block so the title sits closer to the page
+   top and the tabs are visible without scrolling. The minimum here is
+   determined by Streamlit's sticky header (~3.75rem); going smaller hides
+   the title underneath it. */
+.block-container,
+[data-testid="stMainBlockContainer"] {
+  padding-top: 4rem !important;
+}
+
 /* Toggle/action buttons: allow multi-line labels and tighten spacing
    so 12 items fit in a 4x3 grid without scrolling. */
 .stButton > button {
@@ -398,7 +408,9 @@ CSS = """
   text-align: center;
   background: transparent;
   color: rgba(49,51,63,1);
-  margin-bottom: 0.5rem;
+  /* Streamlit puts 1rem of gap below each button row; matching that here so
+     card rows line up vertically with the button rows on the left. */
+  margin-bottom: 1rem;
   font-size: 0.85rem;
   line-height: 1.3;
   min-height: 60px;
@@ -411,8 +423,10 @@ CSS = """
   color: white;
   border-color: var(--primary-color, #FF4B4B);
 }
-.kp-name { font-weight: 600; }
-.kp-stats { font-size: 0.75rem; opacity: 0.85; }
+/* Match the toggle buttons: uniform 0.85rem regular-weight text on both
+   lines, no opacity adjustment. */
+.kp-name { font-weight: 400; }
+.kp-stats { font-size: 0.85rem; opacity: 1; }
 </style>
 """
 
@@ -533,27 +547,34 @@ def render_optimizer_tab():
                         key=f"toggle_{item}",
                     )
 
-        # Color the "Your value" metric green if it matches the optimum, red
-        # otherwise. Only meaningful once a solve has happened.
+        # "Your value" sits beneath the user grid, right-aligned so it lands
+        # next to the chart's "You" axis. Green when it matches the optimum,
+        # red when it doesn't, no color before the first solve.
         if optimal and optimal["status"] == "optimal":
             opt_value = float(optimal["value"])
             matches = abs(your_value - opt_value) < 1e-6
             your_color = "#16a34a" if matches else "#dc2626"
         else:
             your_color = None
-        colored_metric("Your value", f"{your_value:g}", your_color)
+        colored_metric("Your value", f"{your_value:g}", your_color, align="right")
 
     with chart_col:
         # Middle column: bar chart of total weight (user vs optimum) with a
-        # red dashed rule at the capacity W. Built as two layered Altair
-        # charts: bars + horizontal rule.
+        # red dashed rule at the capacity W and a small text label naming
+        # that rule. Built as three layered Altair charts: bars + rule + label.
         st.markdown("**Weight**")
-        chart_rows = [{"source": "You", "value": float(your_weight)}]
+        # Always include both bars so the chart layout stays stable. Before
+        # a successful solve, the Optimal bar shows zero.
         if optimal and optimal["status"] == "optimal":
             # Items the solver selected (y_i > 0.5 since y_i is binary).
             opt_items = {i for i, v in optimal["y"].items() if v > 0.5}
             opt_w = sum(data["weight"][i] for i in opt_items if i in data["weight"])
-            chart_rows.append({"source": "Optimal", "value": float(opt_w)})
+        else:
+            opt_w = 0.0
+        chart_rows = [
+            {"source": "You", "value": float(your_weight)},
+            {"source": "Optimal", "value": float(opt_w)},
+        ]
 
         chart_df = pd.DataFrame(chart_rows)
         # Layer 1: the bars. Encoded fields use Altair's `:N`/`:Q` shorthand
@@ -578,7 +599,9 @@ def render_optimizer_tab():
                 ],
             )
         )
-        # Layer 2: a single horizontal rule at y = weight_limit.
+        # Layer 2: a single horizontal rule at y = weight_limit, plus a
+        # text label sitting just above the line at the left edge of the
+        # chart so the rule is identified at a glance.
         limit_df = pd.DataFrame([{"value": float(data["weight_limit"])}])
         rule = (
             alt.Chart(limit_df)
@@ -588,18 +611,42 @@ def render_optimizer_tab():
                 tooltip=[alt.Tooltip("value:Q", title="Weight limit")],
             )
         )
-        # `+` overlays the two charts in Altair.
-        chart = (bars + rule).properties(height=320)
+        label = (
+            alt.Chart(limit_df)
+            .mark_text(
+                align="left",
+                baseline="bottom",
+                dx=4,
+                dy=-2,
+                color="#dc2626",
+                fontSize=11,
+            )
+            .encode(
+                y="value:Q",
+                x=alt.value(0),
+                text=alt.value(f"Weight limit ({data['weight_limit']:g})"),
+            )
+        )
+        # `+` overlays the layers in Altair.
+        chart = (bars + rule + label).properties(height=320)
         st.altair_chart(chart, width="stretch")
 
     with opt_col:
         # Right column: same 4x3 grid as the user column but rendered as
         # inert cards instead of buttons. Highlights items the solver chose.
-        st.markdown("**Optimal**")
+        # When no solve has happened we render the prompt inline next to the
+        # title so the cards below stay vertically aligned with the user grid.
         if optimal and optimal["status"] == "optimal":
+            st.markdown("**Optimal knapsack**")
             opt_set = {i for i, v in optimal["y"].items() if v > 0.5}
         else:
-            st.caption("Click Run Optimizer to see the optimal selection.")
+            st.markdown(
+                "**Optimal knapsack**"
+                " <span style='color: rgba(49,51,63,0.6); font-size: 0.85rem;"
+                " margin-left: 0.5rem;'>"
+                "Click Run Optimizer to see the optimal selection.</span>",
+                unsafe_allow_html=True,
+            )
             opt_set = set()
 
         for row in _grid_rows(data["items"], cols=3):
@@ -611,12 +658,13 @@ def render_optimizer_tab():
                         continue
                     _render_optimal_card(item, data, on=(item in opt_set))
 
-        # Always green when there is a value to show; em-dash placeholder
-        # before the first solve.
+        # "Optimal value" sits beneath the optimal grid, left-aligned so it
+        # lands next to the chart's "Optimal" axis. Always green once a solve
+        # has happened; em-dash placeholder beforehand.
         if optimal and optimal["status"] == "optimal":
-            colored_metric("Optimal value", f"{float(optimal['value']):g}", "#16a34a")
+            colored_metric("Optimal value", f"{float(optimal['value']):g}", "#16a34a", align="left")
         else:
-            colored_metric("Optimal value", "—", None)
+            colored_metric("Optimal value", "—", None, align="left")
 
 
 def render_data_tab():
@@ -685,28 +733,50 @@ def render_data_tab():
 def render_formulation_tab():
     # Static reference math at the top, dynamic instance math at the bottom.
     # `st.markdown` with `$...$` renders inline LaTeX; `st.latex` renders a
-    # display-style block.
+    # display-style block. The general section is split across a 3-column
+    # grid: the left column stacks Sets/Parameters/Variables (each as a
+    # single markdown block so items stack tightly with no inter-paragraph
+    # margin), the middle column holds the centered objective + constraints,
+    # and the right column is empty padding so the equation lands at the
+    # page midline rather than the right half.
     st.subheader("General Formulation")
+    left, right, _ = st.columns([1, 1, 1])
+    with left:
+        st.markdown(
+            "**Sets**  \n"
+            r"$\mathcal{I} = \{\text{items}\}$"
+        )
+        st.markdown(
+            "**Parameters**  \n"
+            r"$v_i$ value of item $i \in \mathcal{I}$" "  \n"
+            r"$w_i$ weight of item $i \in \mathcal{I}$" "  \n"
+            r"$W$ knapsack weight capacity"
+        )
+        st.markdown(
+            "**Variables**  \n"
+            r"$y_i \in \{0, 1\}$ whether item $i$ is packed"
+        )
+    with right:
+        # Title + display math in one centered block. Using `$$...$$` inside
+        # st.markdown (rather than st.latex in its own component) lets us wrap
+        # both in a single text-align:center div so the equation lines up
+        # under the centered title.
+        st.markdown(
+            r"""<div style="text-align: center;">
 
-    st.markdown("**Sets**")
-    st.markdown(r"$\mathcal{I} = \{\text{items}\}$")
+**Objective and Constraints**
 
-    st.markdown("**Parameters**")
-    st.markdown(r"$v_i$ value of item $i \in \mathcal{I}$")
-    st.markdown(r"$w_i$ weight of item $i \in \mathcal{I}$")
-    st.markdown(r"$W$ knapsack weight capacity")
+$$
+\begin{gathered}
+\max_y \sum_{i \in \mathcal{I}} v_i y_i \quad \text{(value)} \\
+\text{s.t.} \quad \sum_{i \in \mathcal{I}} w_i y_i \le W \quad \text{(capacity)} \\
+y_i \in \{0, 1\} \quad \forall i \in \mathcal{I}
+\end{gathered}
+$$
 
-    st.markdown("**Variables**")
-    st.markdown(r"$y_i \in \{0, 1\}$ whether item $i$ is packed")
-
-    st.markdown("**Objective and Constraints**")
-    st.latex(r"""
-    \begin{gathered}
-    \max_y \sum_{i \in \mathcal{I}} v_i y_i \quad \text{(value)} \\
-    \text{s.t.} \quad \sum_{i \in \mathcal{I}} w_i y_i \le W \quad \text{(capacity)} \\
-    y_i \in \{0, 1\} \quad \forall i \in \mathcal{I}
-    \end{gathered}
-    """)
+</div>""",
+            unsafe_allow_html=True,
+        )
 
     st.divider()
     st.subheader("Instance Formulation")
@@ -747,7 +817,21 @@ init_state()
 # Inject custom CSS once per rerun. `unsafe_allow_html=True` is required for
 # raw HTML/CSS to be rendered through `st.markdown`.
 st.markdown(CSS, unsafe_allow_html=True)
-st.title("Knapsack MIP Optimizer")
+st.markdown(
+    "<h2 style='margin: 0 0 0.25rem 0; padding: 0; font-size: 1.5rem; font-weight: 700;'>"
+    "Knapsack MIP Optimizer"
+    "</h2>",
+    unsafe_allow_html=True,
+)
+_caption_col, _ = st.columns([1, 1])
+with _caption_col:
+    st.markdown(
+        "Try to beat the optimizer: toggle items in the **Optimizer** tab to pack "
+        "the most valuable knapsack you can under the weight limit, then click "
+        "**Run Optimizer** to see how your selection stacks up against the solver's. "
+        "Edit items and capacity in the **Data** tab; the **Formulation** and "
+        "**Logs** tabs show the underlying MIP and solver output."
+    )
 
 # `st.tabs` returns one container per label, used as a context manager to
 # scope subsequent `st.*` calls into that tab.
