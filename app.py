@@ -1,3 +1,36 @@
+# =============================================================================
+# Knapsack MIP Optimizer — a Streamlit tutorial app.
+#
+# This file builds an interactive web app around the classic 0-1 knapsack
+# problem: given a set of items, each with a value and a weight, choose a
+# subset that maximizes total value without exceeding a weight limit.
+#
+# It is solved here as a Mixed-Integer Program (MIP):
+#   maximize   sum_i  v_i * y_i        (total value)
+#   subject to sum_i  w_i * y_i <= W   (capacity)
+#              y_i in {0, 1}           (each item is either packed or not)
+#
+# Library roadmap:
+#   - streamlit  — the UI framework. Each interaction reruns this script
+#                  top-to-bottom; persistent values live in `st.session_state`.
+#   - pyomo      — the algebraic modeling layer. We declare sets, parameters,
+#                  variables, an objective, and constraints, then hand the
+#                  model to a solver.
+#   - GLPK       — the actual MIP solver, called as a subprocess via Pyomo.
+#   - pandas     — used as the data shape for the Streamlit data editor and
+#                  for the bar chart in the optimizer tab.
+#   - altair     — the bar chart comparing your weight to the optimum.
+#
+# File roadmap (matching the section banners below):
+#   1. Solver       — model definition and a wrapper that captures GLPK logs.
+#   2. State        — initializing and mutating st.session_state.
+#   3. Utilities    — DataFrame <-> internal-dict conversion, colored metric.
+#   4. LaTeX        — render the current instance as a formatted equation.
+#   5. CSS          — styling for the item buttons and read-only cards.
+#   6. Tabs         — one render_* function per tab.
+#   7. Main         — page config and tab assembly at module bottom.
+# =============================================================================
+
 import copy
 import html as html_module
 import os
@@ -12,7 +45,14 @@ from pyomo.common.tee import capture_output
 from pyomo.opt import TerminationCondition
 
 
+# Hard cap on item count. The data editor allows adding rows freely; anything
+# beyond this gets truncated with a warning. Twelve fits the 4x3 button grid
+# rendered in the Optimizer tab without scrolling.
 MAX_ITEMS = 12
+
+# Default instance shown on first load and after the "Reset to defaults"
+# button. `items` is the order list; `value`/`weight` are dicts keyed by item
+# name; `weight_limit` is the capacity W.
 
 DEFAULT_DATA = {
     "items": [
@@ -34,17 +74,35 @@ DEFAULT_DATA = {
 
 
 # ---------- Solver ----------
+#
+# Everything here is plain Pyomo: define a ConcreteModel, declare its sets,
+# parameters, variables, objective, and constraints, then call a solver. The
+# only twist is `_solve_capturing`, which works around the fact that GLPK's
+# stdout comes from a subprocess and isn't picked up by ordinary Python
+# stream redirection.
 
 def build_model(data):
+    # ConcreteModel is the eager flavor of Pyomo model: components are bound
+    # to data at construction time (as opposed to AbstractModel + .create_instance()).
     m = pyo.ConcreteModel()
+
+    # Set of item names. Indexes every per-item parameter and variable below.
     m.ITEMS = pyo.Set(initialize=data["items"])
+
+    # Parameters: known data the solver does not change. v_i and w_i.
     m.value = pyo.Param(m.ITEMS, initialize=data["value"])
     m.weight = pyo.Param(m.ITEMS, initialize=data["weight"])
+
+    # Decision variable y_i in {0, 1}. One binary per item: 1 = packed.
     m.y = pyo.Var(m.ITEMS, within=pyo.Binary)
+
+    # Objective: maximize the value of packed items.
     m.total_value = pyo.Objective(
         expr=sum(m.value[i] * m.y[i] for i in m.ITEMS),
         sense=pyo.maximize,
     )
+
+    # Single capacity constraint: total packed weight cannot exceed W.
     m.capacity = pyo.Constraint(
         expr=sum(m.weight[i] * m.y[i] for i in m.ITEMS) <= data["weight_limit"]
     )
@@ -55,6 +113,13 @@ def _solve_capturing(m):
     """Run the solver and return (results, log_text). Captures GLPK's
     subprocess stdout via two mechanisms (FD-level redirect + logfile=)
     so we get output reliably across platforms."""
+    # Two capture paths run in parallel because each is unreliable on its own:
+    #   1. capture_output(capture_fd=True) — redirects at the OS file
+    #      descriptor level, which catches output from child processes like
+    #      the GLPK binary. The capture_fd kwarg only exists in newer Pyomo,
+    #      hence the TypeError fallback.
+    #   2. logfile=log_path — asks GLPK itself to write its log to a file.
+    #      Used as a backup if the FD capture comes back empty.
     fd, log_path = tempfile.mkstemp(suffix=".glpk.log")
     os.close(fd)
     log_text = ""
@@ -65,10 +130,12 @@ def _solve_capturing(m):
                 results = solver.solve(m, tee=True, logfile=log_path)
             log_text = buf.getvalue()
         except TypeError:
+            # Older Pyomo without capture_fd — fall back to the plain form.
             with capture_output() as buf:
                 solver = pyo.SolverFactory("glpk")
                 results = solver.solve(m, tee=True, logfile=log_path)
             log_text = buf.getvalue()
+        # If the in-memory capture missed the output, read the on-disk log.
         if not log_text.strip():
             try:
                 with open(log_path, "r", encoding="utf-8", errors="replace") as f:
@@ -76,6 +143,7 @@ def _solve_capturing(m):
             except OSError:
                 pass
     finally:
+        # Always clean up the temp log file.
         try:
             os.remove(log_path)
         except OSError:
@@ -84,6 +152,11 @@ def _solve_capturing(m):
 
 
 def solve(data):
+    # Top-level entrypoint used by the UI. Always returns a plain dict so the
+    # caller can stash the result in session_state without holding on to a
+    # live Pyomo model.
+
+    # Empty problem — bail before constructing a model with no variables.
     if not data["items"]:
         return {"status": "no_items", "y": {}, "value": None, "log": ""}
 
@@ -92,6 +165,9 @@ def solve(data):
     try:
         results, log = _solve_capturing(m)
     except ApplicationError as e:
+        # Pyomo raises ApplicationError when the solver binary is missing
+        # from PATH. Surfaces a friendly message in the UI rather than a
+        # Python traceback.
         return {
             "status": "solver_missing",
             "message": (
@@ -104,8 +180,12 @@ def solve(data):
             "log": "",
         }
 
+    # Translate Pyomo's TerminationCondition enum into a small set of stable
+    # status strings the UI knows how to render.
     tc = results.solver.termination_condition
     if tc == TerminationCondition.optimal:
+        # Extract numeric values out of the model before returning. After
+        # this point the Pyomo model is no longer needed.
         y = {i: float(pyo.value(m.y[i])) for i in data["items"]}
         value = float(pyo.value(m.total_value))
         return {"status": "optimal", "y": y, "value": value, "log": log}
@@ -116,29 +196,50 @@ def solve(data):
         return {"status": "infeasible", "y": {}, "value": None, "log": log}
     if tc == TerminationCondition.unbounded:
         return {"status": "unbounded", "y": {}, "value": None, "log": log}
+    # Catch-all for anything unexpected (e.g. solver error, time limit).
     return {"status": str(tc), "y": {}, "value": None, "log": log}
 
 
 # ---------- State ----------
+#
+# Streamlit re-executes the whole script on every interaction. Anything that
+# must persist between runs lives in `st.session_state`, a dict-like store
+# scoped to the user's browser session. The keys we use:
+#   - data:                the current problem instance (items/values/weights/W)
+#   - selected:            the user's current selection of items (a set)
+#   - optimal:             the most recent solver result, or None
+#   - _pending_reset:      a one-shot flag to reset on the next run
+#   - weight_limit_input:  the value backing the number_input widget
+#   - data_editor:         backing key for the data editor widget
+#   - toggle_<item>:       backing key for each item toggle button
 
 def init_state():
+    # Idempotent initialization: only seed defaults the first time, otherwise
+    # the user's edits would be wiped on every rerun.
     if "data" not in st.session_state:
         st.session_state.data = copy.deepcopy(DEFAULT_DATA)
     if "selected" not in st.session_state:
         st.session_state.selected = set()
     if "optimal" not in st.session_state:
         st.session_state.optimal = None
+    # The reset button can't directly mutate widget-backed keys without
+    # raising a Streamlit error, so it sets a flag and reruns. We then apply
+    # the reset *before* widgets are instantiated this run.
     if st.session_state.pop("_pending_reset", False):
         apply_reset()
 
 
 def apply_reset():
+    # Restore the default instance and clear any user-driven state.
     st.session_state.data = copy.deepcopy(DEFAULT_DATA)
     st.session_state.selected = set()
     st.session_state.optimal = None
+    # Reseed the number_input's backing key so the widget shows the default.
     st.session_state["weight_limit_input"] = int(DEFAULT_DATA["weight_limit"])
 
 
+# Streamlit `on_click` callbacks. These run between the user's click and the
+# next script rerun, so any state they mutate is visible to the rerun.
 def _toggle_item(item):
     sel = st.session_state.selected
     if item in sel:
@@ -148,6 +249,8 @@ def _toggle_item(item):
 
 
 def _set_at_optimum():
+    # Copy the optimal solution into the user's `selected` set so the user
+    # column visually matches the optimum on the next render.
     optimal = st.session_state.optimal
     if optimal and optimal["status"] == "optimal":
         st.session_state.selected = {
@@ -156,8 +259,14 @@ def _set_at_optimum():
 
 
 # ---------- Utilities ----------
+#
+# Adapters between two data shapes:
+#   - The "internal" dict shape used by the solver and most of the app.
+#   - The DataFrame shape used by Streamlit's data editor widget.
+# Plus one small custom replacement for st.metric that lets us tint the value.
 
 def data_to_df(data):
+    # Internal -> DataFrame. Used to seed the data editor each render.
     return pd.DataFrame([
         {"Item": i, "Value": data["value"][i], "Weight": data["weight"][i]}
         for i in data["items"]
@@ -165,6 +274,9 @@ def data_to_df(data):
 
 
 def df_to_data(df, weight_limit):
+    # DataFrame -> internal. The data editor lets users add/remove/edit rows
+    # freely, so this normalizes whatever they typed: strip whitespace, drop
+    # blanks and duplicates, coerce numerics, clamp to non-negative.
     df = df.copy()
     df["Item"] = df["Item"].astype("string").str.strip()
     df = df.dropna(subset=["Item"])
@@ -184,6 +296,9 @@ def df_to_data(df, weight_limit):
 
 
 def colored_metric(label, value, color):
+    # st.metric doesn't support arbitrary value coloring, so we render our
+    # own metric-shaped block via raw HTML. Used to flag matching/mismatching
+    # values (green if your value equals the optimum, red otherwise).
     style_color = f"color: {color};" if color else ""
     st.markdown(
         f"<div style='margin: 0.25rem 0 1rem 0;'>"
@@ -195,6 +310,11 @@ def colored_metric(label, value, color):
 
 
 # ---------- LaTeX (instance formulation) ----------
+#
+# The Formulation tab shows two things: a static general formulation in math
+# notation, and a dynamic "instance" formulation that substitutes the user's
+# current values into the equation. The helpers here build the LaTeX source
+# for the instance view; Streamlit's `st.latex` renders it.
 
 _LATEX_ESCAPE = [
     ("\\", r"\textbackslash "),
@@ -209,12 +329,16 @@ _LATEX_ESCAPE = [
 
 
 def _latex_text(s):
+    # Wrap an item name in \text{...} so it renders upright (not italicized
+    # like math variables), with special characters escaped.
     for raw, esc in _LATEX_ESCAPE:
         s = s.replace(raw, esc)
     return f"\\text{{{s}}}"
 
 
 def _build_lhs(coefs, items):
+    # Build a "c1 * item1 + c2 * item2 + ..." style sum, skipping zero
+    # coefficients and avoiding a leading "+".
     parts = []
     first = True
     for i in items:
@@ -229,6 +353,8 @@ def _build_lhs(coefs, items):
 
 
 def build_instance_latex(data):
+    # Assemble the full instance formulation as a LaTeX `aligned` block:
+    # objective, capacity constraint, then 0/1 bounds.
     items = data["items"]
     obj = _build_lhs(data["value"], items)
     cap_lhs = _build_lhs(data["weight"], items)
@@ -240,12 +366,17 @@ def build_instance_latex(data):
         f"& {bounds_lhs} \\in \\{{0,1\\}}",
     ]
     body = r"\begin{aligned}" + "\n".join(rows) + r"\end{aligned}"
+    # With many items the line gets long; \small keeps it on screen.
     if len(items) > 7:
         body = r"\small " + body
     return body
 
 
 # ---------- CSS ----------
+#
+# Streamlit's default styling makes the item buttons too tall and prevents
+# multi-line labels. We override a few rules so the 4x3 button grid fits and
+# the read-only "Optimal" cards visually mirror the user's button grid.
 
 CSS = """
 <style>
@@ -287,8 +418,13 @@ CSS = """
 
 
 # ---------- Tabs ----------
+#
+# One render_* function per tab. The Optimizer tab is the main UI; Data lets
+# the user edit items; Formulation shows the math; Logs shows GLPK output.
 
 def _grid_rows(items, cols=3):
+    # Chunk a flat list into rows of `cols` items, padding with None so each
+    # row is the same length (lets the caller pair rows with `st.columns`).
     rows = []
     for r in range(0, len(items), cols):
         row = items[r:r + cols]
@@ -299,6 +435,9 @@ def _grid_rows(items, cols=3):
 
 
 def _render_optimal_card(item, data, on):
+    # An inert read-only card matching the visual size of the toggle button
+    # used for the user's selection. `on` highlights items chosen by the
+    # solver. Item names are HTML-escaped because they come from user input.
     cls = "kp-card kp-card-on" if on else "kp-card"
     safe = html_module.escape(item)
     v = data["value"][item]
@@ -313,18 +452,31 @@ def _render_optimal_card(item, data, on):
 
 
 def render_optimizer_tab():
+    # Layout (top to bottom):
+    #   1. Two action buttons (Run Optimizer, Set at Optimum)
+    #   2. A status banner if the last run wasn't optimal
+    #   3. Three columns: user's selection | weight chart | optimal selection
     data = st.session_state.data
     if not data["items"]:
         st.info("Add at least one item on the Data tab.")
         return
 
-    # Action row
+    # Action row. The third column is empty filler so the buttons stay
+    # narrow on wide screens.
     act1, act2, _ = st.columns([1, 1, 6])
     with act1:
+        # `st.button` returns True the run after it's clicked, so we can
+        # branch on it directly. The result is stored in session_state so
+        # subsequent reruns (e.g. from clicking item buttons) keep showing
+        # the most recent solver result.
         if st.button("Run Optimizer", width="stretch", key="run_btn"):
             st.session_state.optimal = solve(data)
     optimal = st.session_state.optimal
     with act2:
+        # "Set at Optimum" is only meaningful after a successful solve.
+        # Using `on_click` instead of branching on the return value means
+        # the callback runs *before* the rerun, so the new selection is
+        # visible the same render.
         set_disabled = not (optimal and optimal["status"] == "optimal")
         st.button(
             "Set at Optimum",
@@ -348,22 +500,29 @@ def render_optimizer_tab():
     # Three-column body: Your | Weight chart | Optimal
     your_col, chart_col, opt_col = st.columns([2, 1, 2])
 
+    # Aggregates of the user's current selection.
     selected = st.session_state.selected
     your_value = sum(data["value"][i] for i in selected if i in data["value"])
     your_weight = sum(data["weight"][i] for i in selected if i in data["weight"])
 
     with your_col:
+        # Left column: a 4x3 grid of item toggle buttons. Clicking calls
+        # `_toggle_item` to flip the item's membership in `selected`.
         st.markdown("**Your knapsack**")
         for row in _grid_rows(data["items"], cols=3):
             cs = st.columns(3)
             for c, item in zip(cs, row):
                 with c:
                     if item is None:
+                        # Padding cell from `_grid_rows` — keeps columns aligned.
                         st.markdown("&nbsp;", unsafe_allow_html=True)
                         continue
                     v = data["value"][item]
                     w = data["weight"][item]
+                    # \n in a button label renders as a line break thanks to
+                    # `white-space: pre-line` set in CSS above.
                     label = f"{item}\nvalue {v:g} · weight {w:g}"
+                    # `primary` (red) for selected, `secondary` (gray) for not.
                     btn_type = "primary" if item in selected else "secondary"
                     st.button(
                         label,
@@ -374,6 +533,8 @@ def render_optimizer_tab():
                         key=f"toggle_{item}",
                     )
 
+        # Color the "Your value" metric green if it matches the optimum, red
+        # otherwise. Only meaningful once a solve has happened.
         if optimal and optimal["status"] == "optimal":
             opt_value = float(optimal["value"])
             matches = abs(your_value - opt_value) < 1e-6
@@ -383,14 +544,20 @@ def render_optimizer_tab():
         colored_metric("Your value", f"{your_value:g}", your_color)
 
     with chart_col:
+        # Middle column: bar chart of total weight (user vs optimum) with a
+        # red dashed rule at the capacity W. Built as two layered Altair
+        # charts: bars + horizontal rule.
         st.markdown("**Weight**")
         chart_rows = [{"source": "You", "value": float(your_weight)}]
         if optimal and optimal["status"] == "optimal":
+            # Items the solver selected (y_i > 0.5 since y_i is binary).
             opt_items = {i for i, v in optimal["y"].items() if v > 0.5}
             opt_w = sum(data["weight"][i] for i in opt_items if i in data["weight"])
             chart_rows.append({"source": "Optimal", "value": float(opt_w)})
 
         chart_df = pd.DataFrame(chart_rows)
+        # Layer 1: the bars. Encoded fields use Altair's `:N`/`:Q` shorthand
+        # for nominal (categorical) and quantitative axes.
         bars = (
             alt.Chart(chart_df)
             .mark_bar()
@@ -411,6 +578,7 @@ def render_optimizer_tab():
                 ],
             )
         )
+        # Layer 2: a single horizontal rule at y = weight_limit.
         limit_df = pd.DataFrame([{"value": float(data["weight_limit"])}])
         rule = (
             alt.Chart(limit_df)
@@ -420,10 +588,13 @@ def render_optimizer_tab():
                 tooltip=[alt.Tooltip("value:Q", title="Weight limit")],
             )
         )
+        # `+` overlays the two charts in Altair.
         chart = (bars + rule).properties(height=320)
         st.altair_chart(chart, width="stretch")
 
     with opt_col:
+        # Right column: same 4x3 grid as the user column but rendered as
+        # inert cards instead of buttons. Highlights items the solver chose.
         st.markdown("**Optimal**")
         if optimal and optimal["status"] == "optimal":
             opt_set = {i for i, v in optimal["y"].items() if v > 0.5}
@@ -440,6 +611,8 @@ def render_optimizer_tab():
                         continue
                     _render_optimal_card(item, data, on=(item in opt_set))
 
+        # Always green when there is a value to show; em-dash placeholder
+        # before the first solve.
         if optimal and optimal["status"] == "optimal":
             colored_metric("Optimal value", f"{float(optimal['value']):g}", "#16a34a")
         else:
@@ -447,6 +620,8 @@ def render_optimizer_tab():
 
 
 def render_data_tab():
+    # Capacity input. The widget is bound to `weight_limit_input` in
+    # session_state so `apply_reset` can seed it.
     wl_col, _ = st.columns([1, 4])
     with wl_col:
         weight_limit = st.number_input(
@@ -458,6 +633,7 @@ def render_data_tab():
             key="weight_limit_input",
         )
 
+    # Editable items table. `num_rows="dynamic"` lets the user add/delete rows.
     st.subheader(f"Items (max {MAX_ITEMS})")
     df = data_to_df(st.session_state.data)
     table_col, _ = st.columns([2, 3])
@@ -475,6 +651,7 @@ def render_data_tab():
             key="data_editor",
         )
 
+    # Validate / report on the edited table.
     warnings = []
     if len(edited) > MAX_ITEMS:
         warnings.append(f"Capped at {MAX_ITEMS} items; extra rows ignored.")
@@ -485,6 +662,9 @@ def render_data_tab():
 
     new_data = df_to_data(edited, weight_limit)
 
+    # If the cleaned data differs from what we had, commit it to state and
+    # rerun so other tabs see the change. We also invalidate any prior
+    # solver result and drop selections for items that no longer exist.
     if new_data != st.session_state.data:
         st.session_state.data = new_data
         st.session_state.optimal = None
@@ -496,12 +676,16 @@ def render_data_tab():
     for w in warnings:
         st.warning(w)
 
+    # Reset uses the deferred-flag pattern documented in `init_state`.
     if st.button("Reset to defaults"):
         st.session_state["_pending_reset"] = True
         st.rerun()
 
 
 def render_formulation_tab():
+    # Static reference math at the top, dynamic instance math at the bottom.
+    # `st.markdown` with `$...$` renders inline LaTeX; `st.latex` renders a
+    # display-style block.
     st.subheader("General Formulation")
 
     st.markdown("**Sets**")
@@ -534,6 +718,8 @@ def render_formulation_tab():
 
 
 def render_logs_tab():
+    # Shows whatever GLPK printed during the last solve. The capture itself
+    # happens in `_solve_capturing`; this tab just displays the result.
     optimal = st.session_state.optimal
     if not optimal:
         st.info("Run the optimizer to see solver logs.")
@@ -546,12 +732,25 @@ def render_logs_tab():
 
 
 # ---------- Main ----------
+#
+# Module-level code runs on every Streamlit rerun, so this section needs to
+# be cheap and idempotent: configure the page, ensure session_state is set
+# up, inject CSS, then assemble the four tabs.
 
+# `set_page_config` must be the first Streamlit call; "wide" gives the
+# three-column optimizer layout enough horizontal room.
 st.set_page_config(page_title="Knapsack MIP Optimizer", layout="wide")
+
+# Initialize session_state defaults and apply any pending reset.
 init_state()
+
+# Inject custom CSS once per rerun. `unsafe_allow_html=True` is required for
+# raw HTML/CSS to be rendered through `st.markdown`.
 st.markdown(CSS, unsafe_allow_html=True)
 st.title("Knapsack MIP Optimizer")
 
+# `st.tabs` returns one container per label, used as a context manager to
+# scope subsequent `st.*` calls into that tab.
 optimizer_tab, data_tab, formulation_tab, logs_tab = st.tabs(
     ["🎯 Optimizer", "📋 Data", "📐 Formulation", "📜 Logs"]
 )
