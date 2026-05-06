@@ -1,0 +1,24 @@
+# Fly.io config for the Knapsack Streamlit app.
+# Auto-stop machines: idle when no traffic, wake on incoming request (~few seconds).
+# Public URL after deploy: https://griffith-pse-knapsack.fly.dev
+# Custom domain (set up later): https://knapsack.griffith-pse.com
+
+app = "griffith-pse-knapsack"
+primary_region = "ord"  # Chicago — central US, low latency for most North American users.
+
+[build]
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"     # suspend when idle
+  auto_start_machines = true      # wake on request
+  min_machines_running = 0        # don't keep one warm; cost = 0 when idle
+
+  # Streamlit needs WebSocket support for live UI updates.
+  # http_service handles this automatically; no special config needed.
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"  # Streamlit + Pyomo + GLPK comfortably fit in 512MB,
+                  # 1GB gives headroom for larger user-defined problems.
