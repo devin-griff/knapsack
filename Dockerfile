@@ -16,6 +16,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # App source + favicon (referenced by st.set_page_config(page_icon=...)).
 COPY app.py favicon.png ./
 
+# Overwrite Streamlit's default static index.html title and favicon so the
+# initial render — before the React app boots and applies set_page_config —
+# already shows our app name and the blackletter-G favicon, instead of the
+# default "Streamlit" title flashing for ~1s before being replaced.
+RUN STATIC=$(python -c "import streamlit, os; print(os.path.join(os.path.dirname(streamlit.__file__), 'static'))") \
+    && sed -i 's|<title>Streamlit</title>|<title>Knapsack MIP Optimizer</title>|' "$STATIC/index.html" \
+    && cp /app/favicon.png "$STATIC/favicon.png"
+
 # Streamlit listens on 8080 (Fly's expected internal port).
 # --server.address=0.0.0.0 so it binds outside the container.
 # --server.headless=true skips the email prompt on first run.
