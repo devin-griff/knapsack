@@ -13,8 +13,8 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# App source.
-COPY app.py ./
+# App source + favicon (referenced by st.set_page_config(page_icon=...)).
+COPY app.py favicon.png ./
 
 # Streamlit listens on 8080 (Fly's expected internal port).
 # --server.address=0.0.0.0 so it binds outside the container.

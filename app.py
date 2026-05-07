@@ -809,7 +809,7 @@ def render_logs_tab():
 
 # `set_page_config` must be the first Streamlit call; "wide" gives the
 # three-column optimizer layout enough horizontal room.
-st.set_page_config(page_title="Knapsack MIP Optimizer", layout="wide")
+st.set_page_config(page_title="Knapsack MIP Optimizer", page_icon="favicon.png", layout="wide")
 
 # Initialize session_state defaults and apply any pending reset.
 init_state()
