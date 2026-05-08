@@ -614,16 +614,19 @@ def render_optimizer_tab():
         label = (
             alt.Chart(limit_df)
             .mark_text(
-                align="left",
+                align="right",
                 baseline="bottom",
-                dx=4,
+                dx=-4,
                 dy=-2,
                 color="#dc2626",
-                fontSize=11,
+                fontSize=14,
             )
             .encode(
                 y="value:Q",
-                x=alt.value(0),
+                # Anchor to the chart's right edge via a Vega expression
+                # referencing the runtime plot width — independent of the
+                # auto-stretched container size.
+                x=alt.value(alt.expr("width")),
                 text=alt.value(f"Weight limit ({data['weight_limit']:g})"),
             )
         )
