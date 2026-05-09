@@ -833,7 +833,12 @@ st.markdown(
 
 st.markdown(
     "<h2 style='margin: 0 0 0.25rem 0; padding: 0; font-size: 1.5rem; font-weight: 700;'>"
-    "Knapsack MIP Optimizer"
+    "Knapsack MIP Optimizer "
+    "<span style='font-size: 1.15rem; font-weight: 400; color: #6b7280;'>"
+    "powered by "
+    "<a href='https://github.com/ERGO-Code/HiGHS' target='_blank' "
+    "style='color: #6b7280; text-decoration: underline;'>HiGHS</a>"
+    "</span>"
     "</h2>",
     unsafe_allow_html=True,
 )
