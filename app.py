@@ -16,13 +16,14 @@
 #   - pyomo      — the algebraic modeling layer. We declare sets, parameters,
 #                  variables, an objective, and constraints, then hand the
 #                  model to a solver.
-#   - GLPK       — the actual MIP solver, called as a subprocess via Pyomo.
+#   - HiGHS      — the actual MIP solver, called via Pyomo's appsi_highs
+#                  interface. Ships as a pip wheel (`highspy`).
 #   - pandas     — used as the data shape for the Streamlit data editor and
 #                  for the bar chart in the optimizer tab.
 #   - altair     — the bar chart comparing your weight to the optimum.
 #
 # File roadmap (matching the section banners below):
-#   1. Solver       — model definition and a wrapper that captures GLPK logs.
+#   1. Solver       — model definition and a wrapper that captures HiGHS logs.
 #   2. State        — initializing and mutating st.session_state.
 #   3. Utilities    — DataFrame <-> internal-dict conversion, colored metric.
 #   4. LaTeX        — render the current instance as a formatted equation.
@@ -78,9 +79,8 @@ DEFAULT_DATA = {
 #
 # Everything here is plain Pyomo: define a ConcreteModel, declare its sets,
 # parameters, variables, objective, and constraints, then call a solver. The
-# only twist is `_solve_capturing`, which works around the fact that GLPK's
-# stdout comes from a subprocess and isn't picked up by ordinary Python
-# stream redirection.
+# only twist is `_solve_capturing`, which redirects HiGHS's solver output
+# at the OS file-descriptor level so we can show it in the Logs tab.
 
 def build_model(data):
     # ConcreteModel is the eager flavor of Pyomo model: components are bound
@@ -144,15 +144,14 @@ def solve(data):
     try:
         results, log = _solve_capturing(m)
     except ApplicationError as e:
-        # Pyomo raises ApplicationError when the solver binary is missing
-        # from PATH. Surfaces a friendly message in the UI rather than a
-        # Python traceback.
+        # Pyomo raises ApplicationError when the solver isn't available.
+        # HiGHS ships as a pip wheel via highspy, so this normally only
+        # fires on a broken install.
         return {
             "status": "solver_missing",
             "message": (
-                "GLPK solver binary not found. On Streamlit Cloud add "
-                "`glpk-utils` to packages.txt at the repo root. "
-                f"({e})"
+                "HiGHS solver not available. Run `pip install highspy` "
+                f"in your environment. ({e})"
             ),
             "y": {},
             "value": None,
@@ -412,7 +411,7 @@ CSS = """
 # ---------- Tabs ----------
 #
 # One render_* function per tab. The Optimizer tab is the main UI; Data lets
-# the user edit items; Formulation shows the math; Logs shows GLPK output.
+# the user edit items; Formulation shows the math; Logs shows HiGHS output.
 
 def _grid_rows(items, cols=3):
     # Chunk a flat list into rows of `cols` items, padding with None so each
@@ -769,7 +768,7 @@ $$
 
 
 def render_logs_tab():
-    # Shows whatever GLPK printed during the last solve. The capture itself
+    # Shows whatever HiGHS printed during the last solve. The capture itself
     # happens in `_solve_capturing`; this tab just displays the result.
     optimal = st.session_state.optimal
     if not optimal:

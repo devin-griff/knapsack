@@ -20,5 +20,5 @@ primary_region = "ord"  # Chicago — central US, low latency for most North Ame
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "1gb"  # Streamlit + Pyomo + GLPK comfortably fit in 512MB,
+  memory = "1gb"  # Streamlit + Pyomo + HiGHS comfortably fit in 512MB,
                   # 1GB gives headroom for larger user-defined problems.
