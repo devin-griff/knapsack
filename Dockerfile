@@ -1,11 +1,7 @@
-# Minimal image for Streamlit + Pyomo + GLPK.
-# Python 3.12 slim base; glpk-utils provides the `glpsol` solver Pyomo shells out to.
+# Minimal image for Streamlit + Pyomo + HiGHS.
+# Python 3.12 slim base; HiGHS ships as a pip wheel (`highspy`), so no system
+# dependencies are needed.
 FROM python:3.12-slim
-
-# System dependencies: GLPK for the MIP solver.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends glpk-utils \
-    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
