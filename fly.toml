@@ -13,7 +13,7 @@ primary_region = "ord"  # Chicago — central US, low latency for most North Ame
   force_https = true
   auto_stop_machines = "stop"     # suspend when idle
   auto_start_machines = true      # wake on request
-  min_machines_running = 1        # keep one warm; ~$5/mo, no cold-start latency
+  min_machines_running = 0        # don't keep one warm; cost = 0 when idle
 
   # Streamlit needs WebSocket support for live UI updates.
   # http_service handles this automatically; no special config needed.
