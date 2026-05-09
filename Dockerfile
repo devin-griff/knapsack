@@ -28,6 +28,11 @@ RUN STATIC=$(python -c "import streamlit, os; print(os.path.join(os.path.dirname
 # --server.address=0.0.0.0 so it binds outside the container.
 # --server.headless=true skips the email prompt on first run.
 # --browser.gatherUsageStats=false opts out of telemetry.
+# Run as a non-root user. If a future Streamlit (or transitive dep) RCE
+# lands in the container, the attacker doesn't get root. Defense in depth.
+RUN useradd -m -u 1000 streamlit && chown -R streamlit:streamlit /app
+USER streamlit
+
 EXPOSE 8080
 CMD ["streamlit", "run", "app.py", \
      "--server.port=8080", \
