@@ -359,12 +359,13 @@ def build_instance_latex(data):
 CSS = """
 <style>
 /* Tighten the top of the main block so the title sits closer to the page
-   top and the tabs are visible without scrolling. The minimum here is
-   determined by Streamlit's sticky header (~3.75rem); going smaller hides
-   the title underneath it. */
+   top and the tabs are visible without scrolling. 2.5rem clears the
+   sticky header (running-script spinner + «« sidebar toggle in the top-
+   right) without hiding the title underneath it. Same value used across
+   the template family — see griffith-pse-app-template/app.py. */
 .block-container,
 [data-testid="stMainBlockContainer"] {
-  padding-top: 4rem !important;
+  padding-top: 2.5rem !important;
 }
 
 /* Toggle/action buttons: allow multi-line labels and tighten spacing
