@@ -711,38 +711,37 @@ def render_data_tab():
 
 
 def render_formulation_tab():
-    # Static reference math at the top, dynamic instance math at the bottom.
-    # `st.markdown` with `$...$` renders inline LaTeX; `st.latex` renders a
-    # display-style block. The general section is split across a 3-column
-    # grid: the left column stacks Sets/Parameters/Variables (each as a
-    # single markdown block so items stack tightly with no inter-paragraph
-    # margin), the middle column holds the centered objective + constraints,
-    # and the right column is empty padding so the equation lands at the
-    # page midline rather than the right half.
-    st.subheader("General Formulation")
-    left, right, _ = st.columns([1, 1, 1])
-    with left:
-        st.markdown(
-            "**Sets**  \n"
-            r"$\mathcal{I} = \{\text{items}\}$"
-        )
-        st.markdown(
-            "**Parameters**  \n"
-            r"$v_i$ value of item $i \in \mathcal{I}$" "  \n"
-            r"$w_i$ weight of item $i \in \mathcal{I}$" "  \n"
-            r"$W$ knapsack weight capacity"
-        )
-        st.markdown(
-            "**Variables**  \n"
-            r"$y_i \in \{0, 1\}$ whether item $i$ is packed"
-        )
-    with right:
-        # Title + display math in one centered block. Using `$$...$$` inside
-        # st.markdown (rather than st.latex in its own component) lets us wrap
-        # both in a single text-align:center div so the equation lines up
-        # under the centered title.
-        st.markdown(
-            r"""<div style="text-align: center;">
+    # Two sub-tabs (matching pinch-analysis / strip-packing / facility-location):
+    # General (static reference math + pedagogical content) and Instance
+    # (substitutes the user's current items into the formulation).
+    sub_general, sub_instance = st.tabs(["General", "Instance"])
+
+    with sub_general:
+        # 3-column grid: Sets/Parameters/Variables stacked on the left, the
+        # centered objective + constraints in the middle, empty right padding
+        # so the equation lands at the page midline rather than the right half.
+        left, right, _ = st.columns([1, 1, 1])
+        with left:
+            st.markdown(
+                "**Sets**  \n"
+                r"$\mathcal{I} = \{\text{items}\}$"
+            )
+            st.markdown(
+                "**Parameters**  \n"
+                r"$v_i$ value of item $i \in \mathcal{I}$" "  \n"
+                r"$w_i$ weight of item $i \in \mathcal{I}$" "  \n"
+                r"$W$ knapsack weight capacity"
+            )
+            st.markdown(
+                "**Variables**  \n"
+                r"$y_i \in \{0, 1\}$ whether item $i$ is packed"
+            )
+        with right:
+            # Title + display math in one centered block. `$$...$$` inside
+            # st.markdown (rather than st.latex) lets us wrap both in a single
+            # text-align:center div so the equation lines up under the title.
+            st.markdown(
+                r"""<div style="text-align: center;">
 
 **Objective and Constraints**
 
@@ -755,16 +754,77 @@ y_i \in \{0, 1\} \quad \forall i \in \mathcal{I}
 $$
 
 </div>""",
-            unsafe_allow_html=True,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("**Why MILP, not greedy**")
+        st.markdown(
+            "A natural first instinct is to sort items by value-per-weight "
+            "ratio $v_i / w_i$ and pack greedily. This works for the "
+            "*fractional* knapsack but fails for the integer case. Concrete "
+            "counterexample:"
+        )
+        st.markdown(
+            "| Item | Value | Weight | $v_i / w_i$ |\n"
+            "|---|---:|---:|---:|\n"
+            "| A | 60 | 10 | 6.0 |\n"
+            "| B | 100 | 20 | 5.0 |\n"
+            "| C | 120 | 30 | 4.0 |"
+        )
+        st.markdown(
+            "With capacity $W = 50$:\n\n"
+            "- **Greedy** by ratio takes A first (weight 10), then B "
+            "(cumulative 30). C doesn't fit (cumulative would be 60). "
+            "Final value = **160**.\n"
+            "- **Optimal** drops A entirely and packs B + C (weight "
+            "$20 + 30 = 50$, exactly capacity). Final value = **220**.\n\n"
+            "Greedy underperforms by 27%. Branch-and-bound on a MILP "
+            "guarantees the exact optimum."
         )
 
-    st.divider()
-    st.subheader("Instance Formulation")
-    data = st.session_state.data
-    if not data["items"]:
-        st.info("Add at least one item on the Data tab.")
-        return
-    st.latex(build_instance_latex(data))
+        st.markdown("**Solution method**")
+        st.markdown(
+            "Solved as a MILP via branch-and-bound: HiGHS relaxes each "
+            "$y_i \\in \\{0, 1\\}$ to $y_i \\in [0, 1]$, solves the LP, and "
+            "either accepts the solution if all $y_i$ are integer or "
+            "branches on the most fractional one. The LP relaxation "
+            "provides upper bounds that prune subtrees whose "
+            "best-possible value is below the current incumbent. HiGHS is "
+            "a modern open-source LP/MILP solver from Edinburgh's ERGO "
+            "group, distributed as a pip wheel via `highspy`."
+        )
+
+        st.markdown("**Companion notebook**")
+        st.markdown(
+            "See the [companion Jupyter notebook]"
+            "(https://github.com/devin-griff/knapsack/blob/main/Knapsack.ipynb) "
+            "for the Pyomo implementation."
+        )
+
+        st.markdown("**References**")
+        st.markdown(
+            "[1] H. Kellerer, U. Pferschy, and D. Pisinger, "
+            "*Knapsack Problems*. Springer, Berlin, 2004. "
+            "[Springer]"
+            "(https://link.springer.com/book/10.1007/978-3-540-24777-7)"
+        )
+        st.markdown(
+            "[2] Q. Huangfu and J. A. J. Hall, \"Parallelizing the dual "
+            "revised simplex method,\" *Mathematical Programming "
+            "Computation*, vol. 10, no. 1, pp. 119–142, 2018. "
+            "[Springer]"
+            "(https://link.springer.com/article/10.1007/s12532-017-0130-5)"
+        )
+
+    with sub_instance:
+        st.markdown(
+            "The current instance, with values configured on the **Data** tab:"
+        )
+        data = st.session_state.data
+        if not data["items"]:
+            st.info("Add at least one item on the Data tab.")
+            return
+        st.latex(build_instance_latex(data))
 
 
 def render_logs_tab():
