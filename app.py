@@ -717,6 +717,13 @@ def render_optimizer_tab():
 
 
 def render_data_tab():
+    # The Apply / Reset action row and pending-edits banner live at the top
+    # of the tab so they're always visible. They depend on whether the
+    # current widget state differs from `st.session_state.data`, which we
+    # only know after rendering the input widgets below. `st.container()`
+    # reserves the slot now; we fill it once `new_data` is computed.
+    top_slot = st.container()
+
     # Capacity input. The widget is bound to `weight_limit_input` in
     # session_state so `apply_reset` can seed it.
     wl_col, _ = st.columns([1, 4])
@@ -758,11 +765,38 @@ def render_data_tab():
         warnings.append("Duplicate item names were dropped (kept the first).")
 
     new_data = df_to_data(edited, weight_limit)
+    has_pending = new_data != st.session_state.data
 
-    # If the cleaned data differs from what we had, commit it to state and
-    # rerun so other tabs see the change. We also invalidate any prior
-    # solver result and drop selections for items that no longer exist.
-    if new_data != st.session_state.data:
+    # Fill the top slot now that we know whether edits are pending.
+    with top_slot:
+        apply_col, reset_col, _ = st.columns([1, 1, 4])
+        with apply_col:
+            apply_clicked = st.button(
+                "Apply changes",
+                type="primary" if has_pending else "secondary",
+                width="stretch",
+                disabled=not has_pending,
+                key="apply_data_btn",
+            )
+        with reset_col:
+            reset_clicked = st.button(
+                "Reset to defaults",
+                width="stretch",
+                key="reset_data_btn",
+            )
+        if has_pending:
+            st.info(
+                "Edits pending. Click **Apply changes** to update the "
+                "Optimizer tab."
+            )
+
+    for w in warnings:
+        st.warning(w)
+
+    if apply_clicked:
+        # Commit buffered edits. Same logic as the old auto-commit path:
+        # invalidate the visible LP result and prune any selected items
+        # that no longer exist after the edit.
         st.session_state.data = new_data
         st.session_state.optimal = None
         st.session_state.selected = (
@@ -770,11 +804,8 @@ def render_data_tab():
         )
         st.rerun()
 
-    for w in warnings:
-        st.warning(w)
-
     # Reset uses the deferred-flag pattern documented in `init_state`.
-    if st.button("Reset to defaults"):
+    if reset_clicked:
         st.session_state["_pending_reset"] = True
         st.rerun()
 
