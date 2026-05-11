@@ -378,6 +378,27 @@ CSS = """
   min-height: 60px;
 }
 
+/* Recolor the user-side toggle buttons (Streamlit's `type="primary"`)
+   from the default red to the same blue as the "You" bar in the chart.
+   Scoped via :has(.your-knapsack-bank) so the Run-Optimizer button and
+   any other type="primary" buttons elsewhere on the page aren't touched.
+   The marker div is rendered with display:none — :has() is a structural
+   selector and still matches it. Blue is Wong (2011) #0072B2; the
+   `.kp-card-on` orange below is Wong's amber. Same palette, designed
+   for color-blind contrast against each other. */
+[data-testid="stColumn"]:has(.your-knapsack-bank) button[kind="primary"] {
+  background-color: #0072B2 !important;
+  border-color: #0072B2 !important;
+}
+[data-testid="stColumn"]:has(.your-knapsack-bank) button[kind="primary"]:hover {
+  background-color: #005B8E !important;
+  border-color: #005B8E !important;
+}
+[data-testid="stColumn"]:has(.your-knapsack-bank) button[kind="primary"]:active {
+  background-color: #004474 !important;
+  border-color: #004474 !important;
+}
+
 /* Inert read-only cards for the Optimal column. */
 .kp-card {
   border: 1px solid rgba(49,51,63,0.2);
@@ -397,9 +418,14 @@ CSS = """
   justify-content: center;
 }
 .kp-card-on {
-  background: var(--primary-color, #FF4B4B);
+  /* Match the chart's "Optimal" bar color so an item highlighted here
+     visually pairs with the orange bar in the middle column. Wong's
+     2011 amber (#E69F00) is the textbook color-blind-safe partner for
+     the muted Tableau blue used on the user side; sees clearly under
+     deuteranopia/protanopia/tritanopia. */
+  background: #E69F00;
   color: white;
-  border-color: var(--primary-color, #FF4B4B);
+  border-color: #E69F00;
 }
 /* Match the toggle buttons: uniform 0.85rem regular-weight text on both
    lines, no opacity adjustment. */
@@ -501,6 +527,14 @@ def render_optimizer_tab():
         # Left column: a 4x3 grid of item toggle buttons. Clicking calls
         # `_toggle_item` to flip the item's membership in `selected`.
         st.markdown("**Your knapsack**")
+        # Hidden marker so the CSS `:has(.your-knapsack-bank)` rule above
+        # can scope the blue-button override to this column only. The
+        # `display:none` keeps the marker out of layout so it adds no
+        # vertical space.
+        st.markdown(
+            '<div class="your-knapsack-bank" style="display:none"></div>',
+            unsafe_allow_html=True,
+        )
         for row in _grid_rows(data["items"], cols=3):
             cs = st.columns(3)
             for c, item in zip(cs, row):
@@ -567,7 +601,7 @@ def render_optimizer_tab():
                     "source:N",
                     scale=alt.Scale(
                         domain=["You", "Optimal"],
-                        range=["#4C78A8", "#54A24B"],
+                        range=["#0072B2", "#E69F00"],
                     ),
                     legend=None,
                 ),
@@ -608,8 +642,41 @@ def render_optimizer_tab():
                 text=alt.value(f"Weight limit ({data['weight_limit']:g})"),
             )
         )
-        # `+` overlays the layers in Altair.
-        chart = (bars + rule + label).properties(height=320)
+        # Layer 3 (conditional): a warning glyph above the user bar when
+        # the current selection exceeds the weight limit. Uses Wong's
+        # vermillion (#D55E00) — the third color in the Wong (2011)
+        # color-blind-safe triad alongside the blue and amber used for
+        # the bars, so it reads as a clear alert without breaking the
+        # palette. Hover shows the exact overshoot.
+        violates = your_weight > data["weight_limit"]
+        if violates:
+            violation_df = pd.DataFrame([{
+                "source": "You",
+                "value": float(your_weight),
+                "over_by": float(your_weight - data["weight_limit"]),
+            }])
+            violation_mark = (
+                alt.Chart(violation_df)
+                .mark_text(
+                    text="⚠",
+                    fontSize=22,
+                    color="#D55E00",
+                    dy=-12,
+                    baseline="bottom",
+                    fontWeight="bold",
+                )
+                .encode(
+                    x=alt.X("source:N", sort=["You", "Optimal"]),
+                    y="value:Q",
+                    tooltip=[
+                        alt.Tooltip("value:Q", title="Your weight"),
+                        alt.Tooltip("over_by:Q", title="Over by", format=".0f"),
+                    ],
+                )
+            )
+            chart = (bars + rule + label + violation_mark).properties(height=320)
+        else:
+            chart = (bars + rule + label).properties(height=320)
         st.altair_chart(chart, width="stretch")
 
     with opt_col:
