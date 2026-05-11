@@ -643,11 +643,10 @@ def render_optimizer_tab():
             )
         )
         # Layer 3 (conditional): a warning glyph above the user bar when
-        # the current selection exceeds the weight limit. Uses Wong's
-        # vermillion (#D55E00) — the third color in the Wong (2011)
-        # color-blind-safe triad alongside the blue and amber used for
-        # the bars, so it reads as a clear alert without breaking the
-        # palette. Hover shows the exact overshoot.
+        # the current selection exceeds the weight limit. Red (#dc2626)
+        # to match the dashed weight-limit rule — the two reads as a
+        # paired "limit / you crossed it" signal. Hover shows the exact
+        # overshoot.
         violates = your_weight > data["weight_limit"]
         if violates:
             violation_df = pd.DataFrame([{
@@ -660,7 +659,7 @@ def render_optimizer_tab():
                 .mark_text(
                     text="⚠",
                     fontSize=22,
-                    color="#D55E00",
+                    color="#dc2626",
                     dy=-12,
                     baseline="bottom",
                     fontWeight="bold",
