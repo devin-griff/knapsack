@@ -564,8 +564,10 @@ def render_optimizer_tab():
         # red when it doesn't, no color before the first solve.
         if optimal and optimal["status"] == "optimal":
             opt_value = float(optimal["value"])
-            matches = abs(your_value - opt_value) < 1e-6
-            your_color = "#16a34a" if matches else "#dc2626"
+            # Green when you meet or beat the LP optimum's value. Beating
+            # it is only possible while infeasible (over the weight limit)
+            # — the chart's ⚠ glyph handles that flag separately.
+            your_color = "#16a34a" if your_value >= opt_value else "#dc2626"
         else:
             your_color = None
         colored_metric("Your value", f"{your_value:g}", your_color, align="right")
