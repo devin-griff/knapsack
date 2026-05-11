@@ -368,9 +368,12 @@ CSS = """
   padding-top: 2.5rem !important;
 }
 
-/* Toggle/action buttons: allow multi-line labels and tighten spacing
-   so 12 items fit in a 4x3 grid without scrolling. */
-.stButton > button {
+/* User-side toggle buttons: allow multi-line labels and tighten spacing
+   so 12 items fit in a 4x3 grid without scrolling. Scoped via
+   :has(.your-knapsack-bank) so the Run-Optimizer, Set-at-Optimum,
+   Apply-changes, and Reset-to-defaults buttons elsewhere on the page
+   keep Streamlit's default button sizing (smaller, single-line). */
+[data-testid="stColumn"]:has(.your-knapsack-bank) .stButton > button {
   white-space: pre-line;
   font-size: 0.85rem;
   padding: 0.4rem 0.5rem;
