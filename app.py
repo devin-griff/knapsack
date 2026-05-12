@@ -395,6 +395,16 @@ CSS = """
   line-height: 1.3;
   min-height: 60px;
 }
+/* Streamlit wraps the button label in a <p> with its own 1rem /
+   1.3 line-height — that overrides the button-level font-size above
+   and makes the button text render at 16px while the matching
+   `.kp-card` on the optimal side stays at 13.6px (0.85rem). Same
+   font family, mismatched size. Re-applying font-size + line-height
+   on the inner <p> keeps the two columns visually identical. */
+[data-testid="stColumn"]:has(.your-knapsack-bank) .stButton > button p {
+  font-size: 0.85rem;
+  line-height: 1.3;
+}
 
 /* Recolor the user-side toggle buttons (Streamlit's `type="primary"`)
    from the default red to the same blue as the "You" bar in the chart.
