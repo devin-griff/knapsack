@@ -273,15 +273,18 @@ def df_to_data(df, weight_limit):
     }
 
 
-def colored_metric(label, value, color, align="left"):
+def colored_metric(label, value, color, align="left", suffix_html=""):
     # st.metric doesn't support arbitrary value coloring, so we render our
     # own metric-shaped block via raw HTML. Used to flag matching/mismatching
     # values (green if your value equals the optimum, red otherwise).
+    # `suffix_html` is appended inside the value div after the number — used
+    # to drop a constraint-violation ⚠ glyph next to "Your value" when the
+    # user's selection exceeds the weight limit.
     style_color = f"color: {color};" if color else ""
     st.markdown(
         f"<div style='margin: 0.25rem 0 1rem 0; text-align: {align};'>"
         f"<div style='font-size: 0.875rem; color: rgba(49,51,63,0.6); margin-bottom: 0.25rem;'>{label}</div>"
-        f"<div style='font-size: 2rem; font-weight: 600; line-height: 1; {style_color}'>{value}</div>"
+        f"<div style='font-size: 2rem; font-weight: 600; line-height: 1; {style_color}'>{value}{suffix_html}</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
@@ -434,6 +437,80 @@ CSS = """
    lines, no opacity adjustment. */
 .kp-name { font-weight: 400; }
 .kp-stats { font-size: 0.85rem; opacity: 1; }
+
+/* Collapse the .your-knapsack-bank marker's wrapping stElementContainer
+   so it doesn't take vertical space. The inline `display:none` on the
+   marker hides the marker itself, but the wrapping container Streamlit
+   adds around any st.markdown still has padding — pushing the LEFT
+   grid (items + Your value) ~14px below the RIGHT grid (items + Optimal
+   value). Same pattern we use on diet's .optimal-col-marker. `:has()`
+   still finds the marker in the DOM for the column-scoping rules
+   above even though its container box is removed from layout. */
+[data-testid="stElementContainer"]:has(.your-knapsack-bank) {
+  display: none;
+}
+
+/* Constraint-violation ⚠ tooltip next to "Your value". Pure black bg,
+   white text, lower-right of the icon (away from where the cursor
+   sits). Font metrics pinned so width/height match the Vega-tooltip
+   styling below exactly — both ⚠ icons on the page (this one + the
+   chart's over-limit glyph) render a pixel-identical "Constraint
+   violated" popup on hover. */
+.knapsack-violation-icon {
+  position: relative;
+  display: inline-block;
+}
+.knapsack-violation-icon:hover::after {
+  content: attr(data-violation-tooltip);
+  position: absolute;
+  top: 100%;
+  left: 100%;
+  margin-left: 0.5rem;
+  background: #000;
+  color: #fff;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-family: inherit;
+  font-weight: 400;
+  line-height: 1.2;
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+/* Vega-tooltip element appended to <body> by altair_chart's hover
+   plugin. Default styling is white-bg/dark-text/1px-border/8px-radius
+   with its own font stack. Override so the chart's ⚠ tooltip looks
+   identical to the cost-icon tooltip above. */
+#vg-tooltip-element.vg-tooltip {
+  background: #000 !important;
+  color: #fff !important;
+  border: none !important;
+  padding: 0.5rem 0.75rem !important;
+  border-radius: 4px !important;
+  font-size: 0.75rem !important;
+  font-family: inherit !important;
+  font-weight: 400 !important;
+  line-height: 1.2 !important;
+  box-shadow: none !important;
+}
+/* Hide the empty `td.key` column Vega-tooltip renders when title=" ";
+   without this the chart-mark popup is wider than the cost-icon
+   popup. Bar tooltips on the same chart lose their field-name labels
+   but still show the values (You / 12 / Optimal / 14), which remain
+   readable in context. */
+#vg-tooltip-element.vg-tooltip td.key {
+  display: none !important;
+}
+#vg-tooltip-element.vg-tooltip table {
+  border-spacing: 0 !important;
+}
+#vg-tooltip-element.vg-tooltip td,
+#vg-tooltip-element.vg-tooltip th {
+  color: #fff !important;
+  padding: 0 !important;
+}
 </style>
 """
 
@@ -564,16 +641,29 @@ def render_optimizer_tab():
 
         # "Your value" sits beneath the user grid, right-aligned so it lands
         # next to the chart's "You" axis. Green when it matches the optimum,
-        # red when it doesn't, no color before the first solve.
+        # red when it doesn't, no color before the first solve. If the
+        # current selection is over the weight limit, a red ⚠ glyph appears
+        # next to the value number with a "Constraint violated" hover
+        # tooltip — same pattern as the diet app's Your cost icon.
         if optimal and optimal["status"] == "optimal":
             opt_value = float(optimal["value"])
             # Green when you meet or beat the LP optimum's value. Beating
             # it is only possible while infeasible (over the weight limit)
-            # — the chart's ⚠ glyph handles that flag separately.
+            # — the chart's ⚠ glyph + this cost-side ⚠ flag that separately.
             your_color = "#16a34a" if your_value >= opt_value else "#dc2626"
         else:
             your_color = None
-        colored_metric("Your value", f"{your_value:g}", your_color, align="right")
+        violation_icon_html = (
+            '<span class="knapsack-violation-icon" '
+            'data-violation-tooltip="Constraint violated" '
+            'style="color:#dc2626; margin-left:0.5rem; font-size:1.5rem; '
+            'cursor:default; vertical-align:baseline;">⚠</span>'
+            if your_weight > data["weight_limit"] else ''
+        )
+        colored_metric(
+            "Your value", f"{your_value:g}", your_color,
+            align="right", suffix_html=violation_icon_html,
+        )
 
     with chart_col:
         # Middle column: bar chart of total weight (user vs optimum) with a
@@ -657,7 +747,7 @@ def render_optimizer_tab():
             violation_df = pd.DataFrame([{
                 "source": "You",
                 "value": float(your_weight),
-                "over_by": float(your_weight - data["weight_limit"]),
+                "status": "Constraint violated",
             }])
             violation_mark = (
                 alt.Chart(violation_df)
@@ -672,10 +762,11 @@ def render_optimizer_tab():
                 .encode(
                     x=alt.X("source:N", sort=["You", "Optimal"]),
                     y="value:Q",
-                    tooltip=[
-                        alt.Tooltip("value:Q", title="Your weight"),
-                        alt.Tooltip("over_by:Q", title="Over by", format=".0f"),
-                    ],
+                    # Match the Your-value icon: single-line "Constraint
+                    # violated" headline, no other fields. `title=" "`
+                    # hides Vega-Lite's default field-name column so the
+                    # tooltip text reads cleanly.
+                    tooltip=[alt.Tooltip("status:N", title=" ")],
                 )
             )
             chart = (bars + rule + label + violation_mark).properties(height=320)
