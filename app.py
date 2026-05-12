@@ -684,6 +684,12 @@ def render_optimizer_tab():
         ]
 
         chart_df = pd.DataFrame(chart_rows)
+        # Compute y-axis domain max with explicit headroom so the violation
+        # ⚠ glyph (drawn with baseline="bottom" + dy=-12 above the bar) has
+        # room without being clipped by the plot region's top edge. Without
+        # this, picking heavy items pushes the You bar near the chart's
+        # auto-scaled max and the ⚠ on top of it gets cut off.
+        y_max = max(float(your_weight), float(opt_w), float(data["weight_limit"])) * 1.18 + 4
         # Layer 1: the bars. Encoded fields use Altair's `:N`/`:Q` shorthand
         # for nominal (categorical) and quantitative axes.
         bars = (
@@ -691,7 +697,11 @@ def render_optimizer_tab():
             .mark_bar()
             .encode(
                 x=alt.X("source:N", sort=["You", "Optimal"], title=None),
-                y=alt.Y("value:Q", title="Weight"),
+                y=alt.Y(
+                    "value:Q",
+                    title="Weight",
+                    scale=alt.Scale(domain=[0, y_max], nice=False),
+                ),
                 color=alt.Color(
                     "source:N",
                     scale=alt.Scale(
