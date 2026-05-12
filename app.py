@@ -61,13 +61,25 @@ DEFAULT_DATA = {
         "first aid kit", "stove", "jacket", "map", "camera",
         "knife", "compass",
     ],
+    # Tent's value (50) and weight (11) are tuned so a value-per-weight
+    # greedy heuristic FAILS on this instance — pedagogically the whole
+    # point of the app. Greedy picks the high-ratio small items first
+    # (knife 8/1, compass 7/1, flashlight 6/1, camera 16/3, map 5/1)
+    # plus laptop (25/6, ratio 4.17), filling weight 13 for value 67.
+    # Tent at ratio 50/11 = 4.55 sorts AFTER map and BEFORE laptop, but
+    # at weight 11 it doesn't fit alongside the items greedy already
+    # took. The integer optimum is tent + knife + compass + flashlight
+    # = weight 14, value 71 — a 5.6% improvement over greedy that
+    # demonstrates 0-1 knapsack is NP-hard for a reason. With the
+    # earlier tent values (18 / 9), greedy and the MIP both returned
+    # 67 and the demo was a "lucky" instance.
     "value": {
-        "laptop": 25, "water bottle": 4, "tent": 18, "sleeping bag": 14,
+        "laptop": 25, "water bottle": 4, "tent": 50, "sleeping bag": 14,
         "flashlight": 6, "first aid kit": 10, "stove": 12, "jacket": 11,
         "map": 5, "camera": 16, "knife": 8, "compass": 7,
     },
     "weight": {
-        "laptop": 6, "water bottle": 2, "tent": 9, "sleeping bag": 5,
+        "laptop": 6, "water bottle": 2, "tent": 11, "sleeping bag": 5,
         "flashlight": 1, "first aid kit": 3, "stove": 4, "jacket": 4,
         "map": 1, "camera": 3, "knife": 1, "compass": 1,
     },
