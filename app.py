@@ -61,18 +61,20 @@ DEFAULT_DATA = {
         "first aid kit", "stove", "jacket", "map", "camera",
         "knife", "compass",
     ],
-    # Tent's value (50) and weight (11) are tuned so a value-per-weight
-    # greedy heuristic FAILS on this instance — pedagogically the whole
-    # point of the app. Greedy picks the high-ratio small items first
-    # (knife 8/1, compass 7/1, flashlight 6/1, camera 16/3, map 5/1)
-    # plus laptop (25/6, ratio 4.17), filling weight 13 for value 67.
-    # Tent at ratio 50/11 = 4.55 sorts AFTER map and BEFORE laptop, but
-    # at weight 11 it doesn't fit alongside the items greedy already
-    # took. The integer optimum is tent + knife + compass + flashlight
-    # = weight 14, value 71 — a 5.6% improvement over greedy that
-    # demonstrates 0-1 knapsack is NP-hard for a reason. With the
-    # earlier tent values (18 / 9), greedy and the MIP both returned
-    # 67 and the demo was a "lucky" instance.
+    # Tent (value 50, weight 11) and weight_limit 23 are tuned together
+    # so a value-per-weight greedy heuristic FAILS on this instance —
+    # pedagogically the whole point of the app. Greedy takes items by
+    # descending value/weight ratio: knife (8/1), compass (7/1),
+    # flashlight (6/1), camera (16/3), map (5/1), tent (50/11 = 4.55).
+    # It's now at weight 18, so laptop (25/6) no longer fits; greedy
+    # settles for first aid kit + water bottle — 8 items, weight 23,
+    # value 106. The integer optimum swaps greedy's three small fillers
+    # (map, first aid kit, water bottle) for the single laptop: knife +
+    # compass + flashlight + camera + tent + laptop = 6 items, weight 23,
+    # value 112 — a 5.4% improvement. Fewer items, more value: 0-1
+    # knapsack is NP-hard for a reason. Tent was bumped from an earlier
+    # 18 / 9, where greedy and the MIP tied — a "lucky" instance that
+    # didn't make the point.
     "value": {
         "laptop": 25, "water bottle": 4, "tent": 50, "sleeping bag": 14,
         "flashlight": 6, "first aid kit": 10, "stove": 12, "jacket": 11,
@@ -83,7 +85,7 @@ DEFAULT_DATA = {
         "flashlight": 1, "first aid kit": 3, "stove": 4, "jacket": 4,
         "map": 1, "camera": 3, "knife": 1, "compass": 1,
     },
-    "weight_limit": 14,
+    "weight_limit": 23,
 }
 
 
