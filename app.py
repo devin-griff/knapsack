@@ -19,8 +19,8 @@
 #   - HiGHS      — the actual MIP solver, called via Pyomo's appsi_highs
 #                  interface. Ships as a pip wheel (`highspy`).
 #   - pandas     — used as the data shape for the Streamlit data editor and
-#                  for the bar chart in the optimizer tab.
-#   - altair     — the bar chart comparing your weight to the optimum.
+#                  for the bar-chart DataFrame.
+#   - altair     — renders the bar chart comparing your weight to the optimum.
 #
 # File roadmap (matching the section banners below):
 #   1. Solver       — model definition and a wrapper that captures HiGHS logs.
@@ -204,6 +204,8 @@ def solve(data):
 #   - weight_limit_input:  the value backing the number_input widget
 #   - data_editor:         backing key for the data editor widget
 #   - toggle_<item>:       backing key for each item toggle button
+#   - run_btn / set_opt_btn:     Optimizer tab Run / Set-to-optimal buttons
+#   - apply_data_btn / reset_data_btn:  Data tab Apply / Reset buttons
 
 def init_state():
     # Idempotent initialization: only seed defaults the first time, otherwise
@@ -652,7 +654,8 @@ def render_optimizer_tab():
                     # \n in a button label renders as a line break thanks to
                     # `white-space: pre-line` set in CSS above.
                     label = f"{item}\nvalue {v:g} · weight {w:g}"
-                    # `primary` (red) for selected, `secondary` (gray) for not.
+                    # `primary` (recolored to Wong blue in the CSS above)
+                    # for selected, `secondary` (gray) for not.
                     btn_type = "primary" if item in selected else "secondary"
                     st.button(
                         label,
@@ -923,7 +926,7 @@ def render_data_tab():
 
     if apply_clicked:
         # Commit buffered edits. Same logic as the old auto-commit path:
-        # invalidate the visible LP result and prune any selected items
+        # invalidate the visible MIP result and prune any selected items
         # that no longer exist after the edit.
         st.session_state.data = new_data
         st.session_state.optimal = None
