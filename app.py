@@ -1025,7 +1025,6 @@ $$
             "group, distributed as a pip wheel via `highspy`."
         )
 
-        st.markdown("**Companion notebook**")
         st.markdown(
             "See the [companion Jupyter notebook]"
             "(https://github.com/devin-griff/knapsack/blob/main/Knapsack.ipynb) "
