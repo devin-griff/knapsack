@@ -3,7 +3,7 @@
 A Streamlit app for the classic 0-1 knapsack problem as a mixed-integer program
 (Pyomo + HiGHS). Click items to pack them; compare your selection against the
 optimum. The in-app **📐 Formulation** tab summarizes the math, explains why the
-greedy heuristic fails on the integer case, and links to the references — see
+greedy heuristic fails on the integer case, and links to the references: see
 [References](#references) below.
 
 **Live demo:** https://knapsack.griffith-pse.com  
@@ -14,7 +14,7 @@ greedy heuristic fails on the integer case, and links to the references — see
     pip install -r requirements.txt
     streamlit run app.py
 
-HiGHS ships as a pip wheel (`highspy`), so `pip install` covers everything —
+HiGHS ships as a pip wheel (`highspy`), so `pip install` covers everything -
 no separate solver install needed.
 
 ## Deployment
@@ -29,11 +29,11 @@ auto-stop machines. Custom domain wired through Cloudflare DNS.
 
 ## Files
 
-- `app.py` — Streamlit UI, Pyomo model, HiGHS wrapper
-- `Knapsack.ipynb` — formulation in a notebook
-- `requirements.txt` — Python deps
-- `Dockerfile`, `fly.toml`, `.dockerignore` — Fly.io production image config
-- `.github/workflows/deploy.yml` — auto-deploy pipeline
+- `app.py`: Streamlit UI, Pyomo model, HiGHS wrapper
+- `Knapsack.ipynb`: formulation in a notebook
+- `requirements.txt`: Python deps
+- `Dockerfile`, `fly.toml`, `.dockerignore`: Fly.io production image config
+- `.github/workflows/deploy.yml`: auto-deploy pipeline
 
 ## References
 
@@ -47,6 +47,6 @@ method," *Mathematical Programming Computation*, vol. 10, no. 1, pp. 119–142,
 [Springer](https://link.springer.com/article/10.1007/s12532-017-0130-5)
 
 [3] M. L. Bynum, G. A. Hackebeil, W. E. Hart, C. D. Laird, B. L. Nicholson,
-J. D. Siirola, J.-P. Watson, and D. L. Woodruff, *Pyomo — Optimization
+J. D. Siirola, J.-P. Watson, and D. L. Woodruff, *Pyomo: Optimization
 Modeling in Python*, 3rd ed. Cham: Springer, 2021.
 [Springer](https://link.springer.com/book/10.1007/978-3-030-68928-5)

@@ -1,5 +1,5 @@
 # =============================================================================
-# Knapsack MIP Optimizer — a Streamlit tutorial app.
+# Knapsack MIP Optimizer: a Streamlit tutorial app.
 #
 # This file builds an interactive web app around the classic 0-1 knapsack
 # problem: given a set of items, each with a value and a weight, choose a
@@ -11,25 +11,25 @@
 #              y_i in {0, 1}           (each item is either packed or not)
 #
 # Library roadmap:
-#   - streamlit  — the UI framework. Each interaction reruns this script
+#   - streamlit : the UI framework. Each interaction reruns this script
 #                  top-to-bottom; persistent values live in `st.session_state`.
-#   - pyomo      — the algebraic modeling layer. We declare sets, parameters,
+#   - pyomo     : the algebraic modeling layer. We declare sets, parameters,
 #                  variables, an objective, and constraints, then hand the
 #                  model to a solver.
-#   - HiGHS      — the actual MIP solver, called via Pyomo's appsi_highs
+#   - HiGHS     : the actual MIP solver, called via Pyomo's appsi_highs
 #                  interface. Ships as a pip wheel (`highspy`).
-#   - pandas     — used as the data shape for the Streamlit data editor and
+#   - pandas    : used as the data shape for the Streamlit data editor and
 #                  for the bar-chart DataFrame.
-#   - altair     — renders the bar chart comparing your weight to the optimum.
+#   - altair    : renders the bar chart comparing your weight to the optimum.
 #
 # File roadmap (matching the section banners below):
-#   1. Solver       — model definition and a wrapper that captures HiGHS logs.
-#   2. State        — initializing and mutating st.session_state.
-#   3. Utilities    — DataFrame <-> internal-dict conversion, colored metric.
-#   4. LaTeX        — render the current instance as a formatted equation.
-#   5. CSS          — styling for the item buttons and read-only cards.
-#   6. Tabs         — one render_* function per tab.
-#   7. Main         — page config and tab assembly at module bottom.
+#   1. Solver      : model definition and a wrapper that captures HiGHS logs.
+#   2. State       : initializing and mutating st.session_state.
+#   3. Utilities   : DataFrame <-> internal-dict conversion, colored metric.
+#   4. LaTeX       : render the current instance as a formatted equation.
+#   5. CSS         : styling for the item buttons and read-only cards.
+#   6. Tabs        : one render_* function per tab.
+#   7. Main        : page config and tab assembly at module bottom.
 # =============================================================================
 
 import base64
@@ -62,18 +62,18 @@ DEFAULT_DATA = {
         "knife", "compass",
     ],
     # Tent (value 50, weight 11) and weight_limit 23 are tuned together
-    # so a value-per-weight greedy heuristic FAILS on this instance —
+    # so a value-per-weight greedy heuristic FAILS on this instance -
     # pedagogically the whole point of the app. Greedy takes items by
     # descending value/weight ratio: knife (8/1), compass (7/1),
     # flashlight (6/1), camera (16/3), map (5/1), tent (50/11 = 4.55).
     # It's now at weight 18, so laptop (25/6) no longer fits; greedy
-    # settles for first aid kit + water bottle — 8 items, weight 23,
+    # settles for first aid kit + water bottle: 8 items, weight 23,
     # value 106. The integer optimum swaps greedy's three small fillers
     # (map, first aid kit, water bottle) for the single laptop: knife +
     # compass + flashlight + camera + tent + laptop = 6 items, weight 23,
-    # value 112 — a 5.4% improvement. Fewer items, more value: 0-1
+    # value 112: a 5.4% improvement. Fewer items, more value: 0-1
     # knapsack is NP-hard for a reason. Tent was bumped from an earlier
-    # 18 / 9, where greedy and the MIP tied — a "lucky" instance that
+    # 18 / 9, where greedy and the MIP tied: a "lucky" instance that
     # didn't make the point.
     "value": {
         "laptop": 25, "water bottle": 4, "tent": 50, "sleeping bag": 14,
@@ -136,7 +136,7 @@ def _solve_capturing(m):
             results = solver.solve(m, tee=True)
         log_text = buf.getvalue()
     except TypeError:
-        # Older Pyomo without capture_fd — fall back to plain stdout capture.
+        # Older Pyomo without capture_fd: fall back to plain stdout capture.
         with capture_output() as buf:
             solver = pyo.SolverFactory("appsi_highs")
             results = solver.solve(m, tee=True)
@@ -149,7 +149,7 @@ def solve(data):
     # caller can stash the result in session_state without holding on to a
     # live Pyomo model.
 
-    # Empty problem — bail before constructing a model with no variables.
+    # Empty problem: bail before constructing a model with no variables.
     if not data["items"]:
         return {"status": "no_items", "y": {}, "value": None, "log": ""}
 
@@ -293,7 +293,7 @@ def colored_metric(label, value, color, align="left", suffix_html=""):
     # st.metric doesn't support arbitrary value coloring, so we render our
     # own metric-shaped block via raw HTML. Used to flag matching/mismatching
     # values (green if your value equals the optimum, red otherwise).
-    # `suffix_html` is appended inside the value div after the number — used
+    # `suffix_html` is appended inside the value div after the number: used
     # to drop a constraint-violation ⚠ glyph next to "Your value" when the
     # user's selection exceeds the weight limit.
     style_color = f"color: {color};" if color else ""
@@ -381,7 +381,7 @@ CSS = """
    top and the tabs are visible without scrolling. 2.5rem clears the
    sticky header (running-script spinner + «« sidebar toggle in the top-
    right) without hiding the title underneath it. Same value used across
-   the template family — see griffith-pse-app-template/app.py. */
+   the template family: see griffith-pse-app-template/app.py. */
 .block-container,
 [data-testid="stMainBlockContainer"] {
   padding-top: 2.5rem !important;
@@ -400,7 +400,7 @@ CSS = """
   min-height: 60px;
 }
 /* Streamlit wraps the button label in a <p> with its own 1rem /
-   1.3 line-height — that overrides the button-level font-size above
+   1.3 line-height: that overrides the button-level font-size above
    and makes the button text render at 16px while the matching
    `.kp-card` on the optimal side stays at 13.6px (0.85rem). Same
    font family, mismatched size. Re-applying font-size + line-height
@@ -414,7 +414,7 @@ CSS = """
    from the default red to the same blue as the "You" bar in the chart.
    Scoped via :has(.your-knapsack-bank) so the Run-Optimizer button and
    any other type="primary" buttons elsewhere on the page aren't touched.
-   The marker div is rendered with display:none — :has() is a structural
+   The marker div is rendered with display:none: :has() is a structural
    selector and still matches it. Blue is Wong (2011) #0072B2; the
    `.kp-card-on` orange below is Wong's amber. Same palette, designed
    for color-blind contrast against each other. */
@@ -467,7 +467,7 @@ CSS = """
 /* Collapse the .your-knapsack-bank marker's wrapping stElementContainer
    so it doesn't take vertical space. The inline `display:none` on the
    marker hides the marker itself, but the wrapping container Streamlit
-   adds around any st.markdown still has padding — pushing the LEFT
+   adds around any st.markdown still has padding: pushing the LEFT
    grid (items + Your value) ~14px below the RIGHT grid (items + Optimal
    value). Same pattern we use on diet's .optimal-col-marker. `:has()`
    still finds the marker in the DOM for the column-scoping rules
@@ -479,7 +479,7 @@ CSS = """
 /* Constraint-violation ⚠ tooltip next to "Your value". Pure black bg,
    white text, lower-right of the icon (away from where the cursor
    sits). Font metrics pinned so width/height match the Vega-tooltip
-   styling below exactly — both ⚠ icons on the page (this one + the
+   styling below exactly: both ⚠ icons on the page (this one + the
    chart's over-limit glyph) render a pixel-identical "Constraint
    violated" popup on hover. */
 .knapsack-violation-icon {
@@ -615,7 +615,7 @@ def render_optimizer_tab():
         if optimal["status"] == "solver_missing":
             st.error(optimal.get("message", "Solver missing"))
         elif optimal["status"] == "infeasible":
-            st.error("Infeasible — no selection satisfies the weight limit.")
+            st.error("Infeasible: no selection satisfies the weight limit.")
         elif optimal["status"] == "unbounded":
             st.error("Unbounded problem.")
         elif optimal["status"] not in ("optimal", "no_items"):
@@ -646,7 +646,7 @@ def render_optimizer_tab():
             for c, item in zip(cs, row):
                 with c:
                     if item is None:
-                        # Padding cell from `_grid_rows` — keeps columns aligned.
+                        # Padding cell from `_grid_rows`: keeps columns aligned.
                         st.markdown("&nbsp;", unsafe_allow_html=True)
                         continue
                     v = data["value"][item]
@@ -671,12 +671,12 @@ def render_optimizer_tab():
         # red when it doesn't, no color before the first solve. If the
         # current selection is over the weight limit, a red ⚠ glyph appears
         # next to the value number with a "Constraint violated" hover
-        # tooltip — same pattern as the diet app's Your cost icon.
+        # tooltip: same pattern as the diet app's Your cost icon.
         if optimal and optimal["status"] == "optimal":
             opt_value = float(optimal["value"])
             # Green when you meet or beat the LP optimum's value. Beating
             # it is only possible while infeasible (over the weight limit)
-            # — the chart's ⚠ glyph + this cost-side ⚠ flag that separately.
+            #: the chart's ⚠ glyph + this cost-side ⚠ flag that separately.
             your_color = "#16a34a" if your_value >= opt_value else "#dc2626"
         else:
             your_color = None
@@ -768,7 +768,7 @@ def render_optimizer_tab():
             .encode(
                 y="value:Q",
                 # Anchor to the chart's right edge via a Vega expression
-                # referencing the runtime plot width — independent of the
+                # referencing the runtime plot width: independent of the
                 # auto-stretched container size.
                 x=alt.value(alt.expr("width")),
                 text=alt.value(f"Weight limit ({data['weight_limit']:g})"),
@@ -776,7 +776,7 @@ def render_optimizer_tab():
         )
         # Layer 3 (conditional): a warning glyph above the user bar when
         # the current selection exceeds the weight limit. Red (#dc2626)
-        # to match the dashed weight-limit rule — the two reads as a
+        # to match the dashed weight-limit rule: the two reads as a
         # paired "limit / you crossed it" signal. Hover shows the exact
         # overshoot.
         violates = your_weight > data["weight_limit"]
@@ -844,7 +844,7 @@ def render_optimizer_tab():
         if optimal and optimal["status"] == "optimal":
             colored_metric("Optimal value", f"{float(optimal['value']):g}", "#16a34a", align="left")
         else:
-            colored_metric("Optimal value", "—", None, align="left")
+            colored_metric("Optimal value", "-", None, align="left")
 
 
 def render_data_tab():
@@ -1048,7 +1048,7 @@ $$
         st.markdown(
             "[3] M. L. Bynum, G. A. Hackebeil, W. E. Hart, C. D. Laird, "
             "B. L. Nicholson, J. D. Siirola, J.-P. Watson, and D. L. Woodruff, "
-            "*Pyomo — Optimization Modeling in Python*, 3rd ed. "
+            "*Pyomo: Optimization Modeling in Python*, 3rd ed. "
             "Cham: Springer, 2021. "
             "[Springer]"
             "(https://link.springer.com/book/10.1007/978-3-030-68928-5)"
@@ -1100,7 +1100,7 @@ st.markdown(CSS, unsafe_allow_html=True)
 # site. Same-tab navigation since the user is leaving the demo. Pinned to
 # the upper-left corner of the page via position:fixed so it stays visible
 # while scrolling. Image is embedded from the local favicon.png as a base64
-# data URL — the link still navigates to griffith-pse.com when clicked, but
+# data URL: the link still navigates to griffith-pse.com when clicked, but
 # loading the page itself doesn't make any third-party request.
 _FAVICON_DATA_URL = "data:image/png;base64," + base64.b64encode(
     (Path(__file__).parent / "favicon.png").read_bytes()
@@ -1123,7 +1123,7 @@ st.markdown(
     </style>
     <a href="https://griffith-pse.com" target="_self" class="home-logo-corner">
       <img src="https://griffith-pse.com/images/favicon.png"
-           alt="Griffith PSE — home" />
+           alt="Griffith PSE: home" />
     </a>
     """.replace("https://griffith-pse.com/images/favicon.png", _FAVICON_DATA_URL),
     unsafe_allow_html=True,

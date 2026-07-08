@@ -4,7 +4,7 @@
 # Custom domain (set up later): https://knapsack.griffith-pse.com
 
 app = "griffith-pse-knapsack"
-primary_region = "ord"  # Chicago — central US, low latency for most North American users.
+primary_region = "ord"  # Chicago: central US, low latency for most North American users.
 
 [build]
 
